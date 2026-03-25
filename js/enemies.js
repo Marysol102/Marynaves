@@ -130,6 +130,7 @@ function spawnEnemy(type, x, y) {
     angle: 0,
     hp:    def.hp,
     maxHp: def.hp,
+    size:  def.size,
 
     // Timers generales
     stateTimer:    0,
