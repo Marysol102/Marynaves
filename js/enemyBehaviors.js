@@ -2,32 +2,36 @@
 
 import { TYPES } from './enemyTypes.js';
 
-// ── Función principal dispatch ────────────────────────────────
+// Estados kamikaze
+const KS_APPROACH = 0;
+const KS_CHARGE   = 1;
+const KS_FLEE     = 2;
+
 export function updateBehavior(enemy, ship, enemyBullets) {
+  if (ship.isDead) return; // enemigos se quedan quietos si el jugador murió
+
   enemy.stateTimer++;
   enemy.attackTimer++;
 
   const def = TYPES[enemy.type];
 
   switch (def.behavior) {
-    case 'kamikaze':          behaviorKamikaze(enemy, ship, def);                    break;
-    case 'spiral_shooter':    behaviorSpiralShooter(enemy, ship, def, enemyBullets); break;
-    case 'shielded_burst':    behaviorShieldedBurst(enemy, ship, def, enemyBullets); break;
-    case 'boss':              behaviorBoss(enemy, ship, def, enemyBullets);          break;
-    case 'swarm_kamikaze':    behaviorSwarmKamikaze(enemy, ship, def);               break;
-    case 'fast_orbit_burst':  behaviorFastOrbitBurst(enemy, ship, def, enemyBullets);break;
-    case 'crusher':           behaviorCrusher(enemy, ship, def, enemyBullets);       break;
+    case 'kamikaze':          behaviorKamikaze(enemy, ship, def);                     break;
+    case 'spiral_shooter':    behaviorSpiralShooter(enemy, ship, def, enemyBullets);  break;
+    case 'shielded_burst':    behaviorShieldedBurst(enemy, ship, def, enemyBullets);  break;
+    case 'boss':              behaviorBoss(enemy, ship, def, enemyBullets);           break;
+    case 'swarm_kamikaze':    behaviorSwarmKamikaze(enemy, ship, def);                break;
+    case 'fast_orbit_burst':  behaviorFastOrbitBurst(enemy, ship, def, enemyBullets); break;
+    case 'crusher':           behaviorCrusher(enemy, ship, def, enemyBullets);        break;
   }
 
-  // Aplicar física
   enemy.x += enemy.vx;
   enemy.y += enemy.vy;
 
-  // Flash de impacto
   if (enemy.flashTimer > 0) enemy.flashTimer--;
 }
 
-// ── Helpers internos ──────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────
 function toPlayer(enemy, ship) {
   const dx   = ship.x - enemy.x;
   const dy   = ship.y - enemy.y;
@@ -52,37 +56,61 @@ function mkBullet(x, y, angle, speed, hue, size, damage = 1) {
   };
 }
 
-// ── SPORE: deriva → carga kamikaze ───────────────────────────
+// ── SPORE: approach → charge → flee tras contacto ─────────────
 function behaviorKamikaze(enemy, ship, def) {
-  const { nx, ny } = toPlayer(enemy, ship);
+  if (!enemy.kamikazeState) enemy.kamikazeState = KS_APPROACH;
+
+  const { nx, ny, dist } = toPlayer(enemy, ship);
+  const contactDist = enemy.size + ship.size * 0.8;
+
+  if (enemy.kamikazeState === KS_FLEE) {
+    // Huye en dirección opuesta al jugador acelerando
+    enemy.vx -= nx * def.speed * 0.25;
+    enemy.vy -= ny * def.speed * 0.25;
+    capSpeed(enemy, def.speed * 3.5);
+    // Se destruye solo cuando ya está lejos (fuera de la zona de juego)
+    // La destrucción la maneja enemies.js por isWayOutOfBounds
+    return;
+  }
+
   enemy.angle = Math.atan2(ny, nx);
 
-  if (enemy.stateTimer < def.chargeDelay) {
-    // Deriva lenta
+  if (enemy.kamikazeState === KS_APPROACH) {
+    // Deriva lenta acercándose
     enemy.vx += nx * def.speed * 0.04;
     enemy.vy += ny * def.speed * 0.04;
     capSpeed(enemy, def.speed * 0.6);
+    if (enemy.stateTimer >= def.chargeDelay) {
+      enemy.kamikazeState = KS_CHARGE;
+    }
   } else {
-    // Carga rápida
-    enemy.vx += nx * def.speed * 0.18;
-    enemy.vy += ny * def.speed * 0.18;
-    capSpeed(enemy, def.speed * 2.2);
+    // KS_CHARGE: carga directa
+    enemy.vx += nx * def.speed * 0.22;
+    enemy.vy += ny * def.speed * 0.22;
+    capSpeed(enemy, def.speed * 2.8);
   }
+
   enemy.vx *= 0.96;
   enemy.vy *= 0.96;
+
+  // Contacto con jugador → huir
+  if (dist < contactDist) {
+    enemy.kamikazeState = KS_FLEE;
+    // Impulso de rebote
+    enemy.vx = -nx * def.speed * 2.5;
+    enemy.vy = -ny * def.speed * 2.5;
+  }
 }
 
-// ── DRIFTER: orbita + espiral continua ────────────────────────
+// ── DRIFTER: orbita + espiral continua ─────────────────────────
 function behaviorSpiralShooter(enemy, ship, def, enemyBullets) {
   const { dx, dy, dist, nx, ny } = toPlayer(enemy, ship);
 
-  // Mantener distancia orbital
   const diff  = dist - def.orbitRadius;
   const force = diff / def.orbitRadius * 0.025;
   enemy.vx += nx * force * def.speed * 12;
   enemy.vy += ny * force * def.speed * 12;
 
-  // Deriva perpendicular (orbita)
   const perpX = -dy / dist;
   const perpY =  dx / dist;
   enemy.vx += perpX * 0.014;
@@ -95,7 +123,6 @@ function behaviorSpiralShooter(enemy, ship, def, enemyBullets) {
   const spd = Math.sqrt(enemy.vx ** 2 + enemy.vy ** 2);
   if (spd > 0.1) enemy.angle = Math.atan2(enemy.vy, enemy.vx);
 
-  // Disparo en espiral: un proyectil por tick en ángulo rotante
   if (enemy.attackTimer >= def.attackInterval) {
     enemy.attackTimer = 0;
     enemyBullets.push(mkBullet(
@@ -107,11 +134,10 @@ function behaviorSpiralShooter(enemy, ship, def, enemyBullets) {
   }
 }
 
-// ── SHELL: orbita + escudo frontal + ráfaga ──────────────────
+// ── SHELL: orbita + escudo frontal + ráfaga ────────────────────
 function behaviorShieldedBurst(enemy, ship, def, enemyBullets) {
   const { dx, dy, dist, nx, ny } = toPlayer(enemy, ship);
 
-  // Orbita
   const diff  = dist - def.orbitRadius;
   const force = diff / def.orbitRadius * 0.022;
   enemy.vx += nx * force * def.speed * 12;
@@ -126,19 +152,15 @@ function behaviorShieldedBurst(enemy, ship, def, enemyBullets) {
   enemy.vx *= 0.98;
   enemy.vy *= 0.98;
 
-  // El escudo siempre apunta al jugador
   enemy.shieldAngle = Math.atan2(dy, dx);
 
-  // Iniciar ráfaga
   if (enemy.attackTimer >= def.attackInterval && enemy.burstRemaining === 0) {
-    enemy.attackTimer  = 0;
+    enemy.attackTimer    = 0;
     enemy.burstRemaining = def.burstCount;
-    enemy.burstTimer   = 0;
-    // Bloquear ángulo al jugador en el momento de disparar
-    enemy.burstAimAngle = Math.atan2(dy, dx);
+    enemy.burstTimer     = 0;
+    enemy.burstAimAngle  = Math.atan2(dy, dx);
   }
 
-  // Ejecutar ráfaga
   if (enemy.burstRemaining > 0) {
     enemy.burstTimer++;
     if (enemy.burstTimer >= def.burstInterval) {
@@ -156,11 +178,10 @@ function behaviorShieldedBurst(enemy, ship, def, enemyBullets) {
   }
 }
 
-// ── LEVIATÁN: jefe, ring + espiral simultáneos ───────────────
+// ── LEVIATÁN: jefe ─────────────────────────────────────────────
 function behaviorBoss(enemy, ship, def, enemyBullets) {
   const { dx, dy, dist, nx, ny } = toPlayer(enemy, ship);
 
-  // Avance lento
   enemy.vx += nx * 0.01;
   enemy.vy += ny * 0.01;
   capSpeed(enemy, def.speed);
@@ -169,7 +190,6 @@ function behaviorBoss(enemy, ship, def, enemyBullets) {
 
   if (dist > 5) enemy.angle = Math.atan2(dy, dx);
 
-  // Ring: todos los ángulos a la vez
   enemy.ringTimer++;
   if (enemy.ringTimer >= def.ringInterval) {
     enemy.ringTimer = 0;
@@ -183,7 +203,6 @@ function behaviorBoss(enemy, ship, def, enemyBullets) {
     }
   }
 
-  // Espiral continua
   enemy.spiralTimer++;
   if (enemy.spiralTimer >= def.spiralInterval) {
     enemy.spiralTimer = 0;
@@ -196,22 +215,38 @@ function behaviorBoss(enemy, ship, def, enemyBullets) {
   }
 }
 
-// ── SWARM: crías en grupo kamikaze ────────────────────────────
+// ── SWARM: crías kamikaze con flee ─────────────────────────────
 function behaviorSwarmKamikaze(enemy, ship, def) {
-  const { nx, ny } = toPlayer(enemy, ship);
+  if (!enemy.kamikazeState) enemy.kamikazeState = KS_CHARGE; // crías cargan directo
+
+  const { nx, ny, dist } = toPlayer(enemy, ship);
+  const contactDist = enemy.size + ship.size * 0.8;
+
+  if (enemy.kamikazeState === KS_FLEE) {
+    enemy.vx -= nx * def.speed * 0.3;
+    enemy.vy -= ny * def.speed * 0.3;
+    capSpeed(enemy, def.speed * 4);
+    return;
+  }
+
   enemy.angle = Math.atan2(ny, nx);
   enemy.vx += nx * def.speed * 0.14;
   enemy.vy += ny * def.speed * 0.14;
   capSpeed(enemy, def.speed);
   enemy.vx *= 0.97;
   enemy.vy *= 0.97;
+
+  if (dist < contactDist) {
+    enemy.kamikazeState = KS_FLEE;
+    enemy.vx = -nx * def.speed * 3;
+    enemy.vy = -ny * def.speed * 3;
+  }
 }
 
-// ── DART: órbita rápida + ráfaga ──────────────────────────────
+// ── DART: órbita rápida + ráfaga ───────────────────────────────
 function behaviorFastOrbitBurst(enemy, ship, def, enemyBullets) {
   const { dx, dy, dist, nx, ny } = toPlayer(enemy, ship);
 
-  // Orbita rápida estrecha
   const diff  = dist - 175;
   const force = diff / 175 * 0.07;
   enemy.vx += nx * force * 15;
@@ -229,7 +264,6 @@ function behaviorFastOrbitBurst(enemy, ship, def, enemyBullets) {
   const spd = Math.sqrt(enemy.vx ** 2 + enemy.vy ** 2);
   if (spd > 0.1) enemy.angle = Math.atan2(enemy.vy, enemy.vx);
 
-  // Iniciar ráfaga
   if (enemy.attackTimer >= def.attackInterval && enemy.burstRemaining === 0) {
     enemy.attackTimer    = 0;
     enemy.burstRemaining = def.burstCount;
@@ -237,7 +271,6 @@ function behaviorFastOrbitBurst(enemy, ship, def, enemyBullets) {
     enemy.burstAimAngle  = Math.atan2(ny, nx);
   }
 
-  // Ejecutar ráfaga
   if (enemy.burstRemaining > 0) {
     enemy.burstTimer++;
     if (enemy.burstTimer >= def.burstInterval) {
@@ -255,11 +288,10 @@ function behaviorFastOrbitBurst(enemy, ship, def, enemyBullets) {
   }
 }
 
-// ── CRUSHER: avance + empujón + minas ────────────────────────
+// ── CRUSHER: avance + empujón + minas ──────────────────────────
 function behaviorCrusher(enemy, ship, def, enemyBullets) {
   const { dx, dy, dist, nx, ny } = toPlayer(enemy, ship);
 
-  // Avance si está lejos
   if (dist > def.pushRadius * 1.4) {
     enemy.vx += nx * 0.015;
     enemy.vy += ny * 0.015;
@@ -269,14 +301,12 @@ function behaviorCrusher(enemy, ship, def, enemyBullets) {
   enemy.vy *= 0.98;
   enemy.angle = Math.atan2(dy, dx);
 
-  // Empujón al jugador si está cerca
   if (dist < def.pushRadius) {
     const strength = (1 - dist / def.pushRadius) * def.pushForce * 0.07;
     ship.vx -= nx * strength;
     ship.vy -= ny * strength;
   }
 
-  // Soltar mina
   if (enemy.attackTimer >= def.mineInterval) {
     enemy.attackTimer = 0;
     enemyBullets.push({

@@ -22,6 +22,12 @@ function resize() {
 function init() {
   resize();
   window.addEventListener('resize', resize);
+  window.addEventListener('keydown', e => {
+    if (e.key === 'r' || e.key === 'R') {
+      if (ship.isDead && ship.deathTimer > 80) restart();
+    }
+  });
+
   initInput(canvas);
   initShip(W, H);
   initBackground(W, H);
@@ -29,17 +35,23 @@ function init() {
   loop();
 }
 
+function restart() {
+  initShip(W, H);
+  initEnemies();
+}
+
 function loop() {
   try {
     updateShip(W, H);
-    updateBullets(W, H);
+    if (!ship.isDead) {
+      updateBullets(W, H);
+    }
     updateParticles();
     updateEnemies(W, H, ship);
     checkCollisions();
     drawBackground(ctx, W, H);
     drawScene(ctx, W, H);
   } catch (err) {
-    // Registrar el error pero NO detener el loop
     console.error('Loop error:', err);
   }
   requestAnimationFrame(loop);
