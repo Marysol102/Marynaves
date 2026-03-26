@@ -4,11 +4,11 @@ export const TYPES = {
 
   // ─── ESPORA: pequeña, kamikaze ───────────────────────────────
   SPORE: {
-    hp: 1, size: 7, speed: 1.8,
+    hp: 1, size: 7, speed: 1.1,
     hue: 300,                   // magenta
     scoreValue: 10,
     behavior: 'kamikaze',
-    chargeDelay: 90,            // frames derivando antes de cargar
+    chargeDelay: 70,            // frames derivando antes de cargar
   },
 
   // ─── MEDUSA: orbitante, disparo en espiral ───────────────────
@@ -48,7 +48,7 @@ export const TYPES = {
 
   // ─── CRÍA: muy pequeña, aparece en grupo ─────────────────────
   SWARM: {
-    hp: 1, size: 5, speed: 2.6,
+    hp: 1, size: 5, speed: 1.5,
     hue: 78,                    // verde-amarillo
     scoreValue: 5,
     behavior: 'swarm_kamikaze',

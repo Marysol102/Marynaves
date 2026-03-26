@@ -121,41 +121,51 @@ function drawCreature(ctx) {
 
 // ── Haz de mira ───────────────────────────────────────────────
 function drawAimBeam(ctx, x, y, angle, s) {
-  const beamLen = 55;
-  const startD  = s * 1.1;          // empieza justo delante del morro
+  const beamLen = 180;               // más largo
+  const startD  = s * 1.1;
   const sx = x + Math.cos(angle) * startD;
   const sy = y + Math.sin(angle) * startD;
   const ex = x + Math.cos(angle) * (startD + beamLen);
   const ey = y + Math.sin(angle) * (startD + beamLen);
 
   ctx.save();
-  // Línea exterior tenue
-  ctx.strokeStyle = 'rgba(180,240,255,0.12)';
-  ctx.lineWidth   = 3;
+
+  // Capa exterior muy difuminada (halo ancho)
+  const halo = ctx.createLinearGradient(sx, sy, ex, ey);
+  halo.addColorStop(0,   'rgba(140,210,255,0.07)');
+  halo.addColorStop(0.4, 'rgba(140,210,255,0.04)');
+  halo.addColorStop(1,   'rgba(140,210,255,0)');
+  ctx.strokeStyle = halo;
+  ctx.lineWidth   = 10;
+  ctx.shadowBlur  = 0;
   ctx.beginPath();
   ctx.moveTo(sx, sy);
   ctx.lineTo(ex, ey);
   ctx.stroke();
 
-  // Línea central brillante con degradado
-  const grad = ctx.createLinearGradient(sx, sy, ex, ey);
-  grad.addColorStop(0, 'rgba(180,240,255,0.7)');
-  grad.addColorStop(1, 'rgba(180,240,255,0)');
-  ctx.strokeStyle = grad;
-  ctx.lineWidth   = 1.2;
-  ctx.shadowColor = 'rgba(120,200,255,0.5)';
-  ctx.shadowBlur  = 6;
+  // Capa media
+  const mid = ctx.createLinearGradient(sx, sy, ex, ey);
+  mid.addColorStop(0,   'rgba(180,235,255,0.13)');
+  mid.addColorStop(0.6, 'rgba(180,235,255,0.05)');
+  mid.addColorStop(1,   'rgba(180,235,255,0)');
+  ctx.strokeStyle = mid;
+  ctx.lineWidth   = 4;
   ctx.beginPath();
   ctx.moveTo(sx, sy);
   ctx.lineTo(ex, ey);
   ctx.stroke();
 
-  // Puntito en el extremo
-  ctx.fillStyle   = 'rgba(200,240,255,0.4)';
-  ctx.shadowBlur  = 4;
+  // Línea central casi invisible — solo un hilo de luz
+  const core = ctx.createLinearGradient(sx, sy, ex, ey);
+  core.addColorStop(0,   'rgba(210,245,255,0.28)');
+  core.addColorStop(0.5, 'rgba(210,245,255,0.08)');
+  core.addColorStop(1,   'rgba(210,245,255,0)');
+  ctx.strokeStyle = core;
+  ctx.lineWidth   = 0.8;
   ctx.beginPath();
-  ctx.arc(ex, ey, 1.8, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.moveTo(sx, sy);
+  ctx.lineTo(ex, ey);
+  ctx.stroke();
 
   ctx.restore();
 }
